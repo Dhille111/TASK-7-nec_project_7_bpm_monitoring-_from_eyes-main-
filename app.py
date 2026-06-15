@@ -73,14 +73,21 @@ def load_models_on_startup():
     global cnn_model, bilstm_model
     try:
         from tensorflow.keras.models import load_model
-        print(f"Loading CNN model from: {MODEL_CNN_PATH}")
+        import sys
+        print(f"Loading CNN model from: {MODEL_CNN_PATH}", file=sys.stderr)
+        sys.stderr.flush()
         cnn_model = load_model(MODEL_CNN_PATH)
-        print(f"Loading BiLSTM model from: {MODEL_BILSTM_PATH}")
+        print(f"Loading BiLSTM model from: {MODEL_BILSTM_PATH}", file=sys.stderr)
+        sys.stderr.flush()
         bilstm_model = load_model(MODEL_BILSTM_PATH)
-        print("Models loaded successfully.")
+        print("Models loaded successfully.", file=sys.stderr)
+        sys.stderr.flush()
     except Exception as e:
-        print(f"CRITICAL ERROR loading models: {e}")
-        print("Please check that model files exist in 'saved_models/'.")
+        import sys
+        import traceback
+        print(f"CRITICAL ERROR loading models: {e}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+        sys.stderr.flush()
 
 # Serve Frontend Dashboard
 @app.route('/')
