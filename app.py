@@ -29,6 +29,7 @@ CORS(app)
 cnn_model = None
 bilstm_model = None
 last_bpm_cache = None
+model_loading_error = None
 
 # Bandpass Filter (0.8Hz - 2.0Hz -> 48BPM - 120BPM)
 def butter_bandpass(signal, fs):
@@ -70,7 +71,7 @@ def estimate_dsp_bpm(signal, fs):
     return bpm, snr
 
 def load_models_on_startup():
-    global cnn_model, bilstm_model
+    global cnn_model, bilstm_model, model_loading_error
     try:
         from tensorflow.keras.models import load_model
         import sys
@@ -85,9 +86,10 @@ def load_models_on_startup():
     except Exception as e:
         import sys
         import traceback
-        print(f"CRITICAL ERROR loading models: {e}", file=sys.stderr)
-        traceback.print_exc(file=sys.stderr)
+        err_msg = f"CRITICAL ERROR loading models: {e}\n{traceback.format_exc()}"
+        print(err_msg, file=sys.stderr)
         sys.stderr.flush()
+        model_loading_error = err_msg
 
 # Serve Frontend Dashboard
 @app.route('/')
@@ -107,6 +109,10 @@ def predict():
     
     if len(raw_signal) != BUFFER_SIZE:
         return jsonify({"error": f"Signal must contain exactly {BUFFER_SIZE} samples"}), 400
+
+    if cnn_model is None or bilstm_model is None:
+        err = model_loading_error or "Models uninitialized (unknown cause)"
+        return jsonify({"error": f"Models are not loaded. Diagnostic trace:\n{err}"}), 500
 
     try:
         # Use raw signal for deep learning models as they were trained on raw values
