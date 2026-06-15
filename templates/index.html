@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clinical Patient Monitor - PPG Retina</title>
+    <!-- Medical UI Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/styles.css">
+    
+    <!-- MediaPipe Face Mesh Dependencies via CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+</head>
+<body>
+    <div class="monitor-container">
+        
+        <!-- Header: Patient Metadata & Alarm Status -->
+        <header class="monitor-header">
+            <div class="patient-info">
+                <div class="info-cell">
+                    <span class="info-label">PATIENT ID</span>
+                    <span class="info-value">PT-4092-B</span>
+                </div>
+                <div class="info-cell">
+                    <span class="info-label">BED WARD</span>
+                    <span class="info-value">ICU-04</span>
+                </div>
+                <div class="info-cell">
+                    <span class="info-label">NAME</span>
+                    <span class="info-value">ADULT - STANDBY</span>
+                </div>
+            </div>
+            
+            <!-- Alarm Status Bar (Toggles color and text if out of boundaries) -->
+            <div id="alarm-bar" class="alarm-banner banner-normal">
+                <span id="alarm-status-icon" class="alarm-icon">✓</span>
+                <span id="alarm-status-text">LIMITS OK: HR 50 - 120</span>
+            </div>
+
+            <div class="system-time">
+                <div class="info-cell align-right">
+                    <span class="info-label">DATE / TIME</span>
+                    <span id="live-time" class="info-value">--:--:--</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Monitor Grid -->
+        <main class="monitor-grid">
+            
+            <!-- Left Panel: Control Station & Video Feed -->
+            <section class="control-station">
+                <div class="station-block">
+                    <div class="block-header">ACQUISITION CONTROL</div>
+                    <div class="button-grid">
+                        <button id="btn-start" class="btn btn-start">START SENSING</button>
+                        <button id="btn-stop" class="btn btn-stop" disabled>STOP SENSING</button>
+                    </div>
+                </div>
+
+                <div class="station-block">
+                    <div class="block-header">AUDIO PRESET</div>
+                    <div class="control-row">
+                        <label class="switch-container">
+                            <input type="checkbox" id="chk-audio" checked>
+                            <span class="slider"></span>
+                        </label>
+                        <span class="control-label">PULSE BEEP (800 Hz)</span>
+                    </div>
+                </div>
+
+                <div class="station-block">
+                    <div class="block-header">RETINA SENSOR SCANNER</div>
+                    <div class="webcam-window">
+                        <video id="webcam" style="display:none;" autoplay playsinline></video>
+                        <canvas id="canvas-overlay"></canvas>
+                        <div id="tracking-badge" class="tracking-indicator offline">OFFLINE</div>
+                    </div>
+                    
+                    <div class="eye-crops-row">
+                        <div class="crop-box">
+                            <span class="crop-lbl">L-EYE</span>
+                            <canvas id="canvas-left-eye"></canvas>
+                        </div>
+                        <div class="crop-box">
+                            <span class="crop-lbl">R-EYE</span>
+                            <canvas id="canvas-right-eye"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="station-block">
+                    <div class="block-header">DATASET LOGGING</div>
+                    <div class="input-row">
+                        <input type="number" id="input-bpm" placeholder="LABEL BPM" class="clinical-input">
+                        <button id="btn-save" class="btn btn-save" disabled>LOG SEQUENCE</button>
+                    </div>
+                    <div id="save-status-msg" class="save-status"></div>
+                </div>
+            </section>
+
+            <!-- Middle Panel: Sweeping Waveforms -->
+            <section class="waveform-station">
+                
+                <!-- Pleth Wave (PPG Filtered) -->
+                <div class="waveform-block">
+                    <div class="wave-header">
+                        <span class="wave-title green-txt">PLETH</span>
+                        <span class="wave-scale">x1.00</span>
+                    </div>
+                    <div class="canvas-container grid-bg">
+                        <canvas id="canvas-ppg"></canvas>
+                    </div>
+                </div>
+
+                <!-- Sensor Wave (PPG Raw) -->
+                <div class="waveform-block">
+                    <div class="wave-header">
+                        <span class="wave-title cyan-txt">RETINA SENSOR</span>
+                        <span class="wave-scale">RAW INTENSITY</span>
+                    </div>
+                    <div class="canvas-container grid-bg">
+                        <canvas id="canvas-raw-sensor"></canvas>
+                    </div>
+                </div>
+
+                <!-- Signal Progress Bar -->
+                <div class="progress-bar-container">
+                    <div class="progress-label">SIGNAL LOCK STABILIZATION BUFFER:</div>
+                    <div class="bar-outer">
+                        <div id="buffer-fill-bar" class="bar-inner" style="width: 0%"></div>
+                    </div>
+                    <div class="progress-numeric"><span id="buffer-count">0</span> / 300 FRAMES</div>
+                </div>
+            </section>
+
+            <!-- Right Panel: Clinical Numeric Parameters -->
+            <section class="parameters-station">
+                
+                <!-- HR Box -->
+                <div id="card-hr" class="parameter-card param-green">
+                    <div class="param-header">
+                        <span class="param-name">HR</span>
+                        <div class="param-limits">
+                            <span class="lim-val">120</span>
+                            <span class="lim-val">50</span>
+                        </div>
+                    </div>
+                    <div class="param-value-row">
+                        <div class="heart-pulse-wrapper">
+                            <span id="heart-pulse-icon" class="pulse-heart">♥</span>
+                        </div>
+                        <span id="consensus-bpm" class="param-value">--</span>
+                        <div class="param-unit-col">
+                            <span class="param-unit">bpm</span>
+                            <span class="param-source">FUZZY FUSED</span>
+                        </div>
+                    </div>
+                    <div class="param-footer">
+                        <span>CONFIDENCE: </span><span id="consensus-conf" class="footer-val">N/A</span>
+                    </div>
+                </div>
+
+                <!-- NIBP (Blood Pressure - Emulated Clinic standard) -->
+                <div class="parameter-card param-cyan">
+                    <div class="param-header">
+                        <span class="param-name">NIBP</span>
+                        <span class="param-sub">MANUAL</span>
+                    </div>
+                    <div class="param-value-row">
+                        <span class="param-value double-value">120<span class="slash">/</span>80</span>
+                        <div class="param-unit-col">
+                            <span class="param-unit">mmHg</span>
+                            <span class="param-source">MAP (93)</span>
+                        </div>
+                    </div>
+                    <div class="param-footer">
+                        <span>SYS/DIA STATUS: </span><span class="footer-val normal-val">NORMAL</span>
+                    </div>
+                </div>
+
+                <!-- SPO2 / Neural Models -->
+                <div class="parameter-card param-yellow">
+                    <div class="param-header">
+                        <span class="param-name">MODEL REGRESSIONS</span>
+                        <span class="param-sub">ESTIMATES</span>
+                    </div>
+                    <div class="models-column">
+                        <div class="model-row">
+                            <span class="model-name">CNN REG:</span>
+                            <span id="cnn-bpm" class="model-val">-- bpm</span>
+                        </div>
+                        <div class="model-row">
+                            <span class="model-name">BILSTM RNN:</span>
+                            <span id="bilstm-bpm" class="model-val">-- bpm</span>
+                        </div>
+                        <div class="model-row">
+                            <span class="model-name">DSP FFT:</span>
+                            <span id="dsp-bpm" class="model-val">-- bpm</span>
+                        </div>
+                        <div class="model-row">
+                            <span class="model-name">DSP SNR:</span>
+                            <span id="dsp-snr" class="model-val">--</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TEMP / HRV Box -->
+                <div class="parameter-card param-white">
+                    <div class="param-header">
+                        <span class="param-name">PHYSIOLOGICAL DATA</span>
+                        <span class="param-sub">HRV & TEMP</span>
+                    </div>
+                    <div class="models-column">
+                        <div class="model-row">
+                            <span class="model-name">SDNN:</span>
+                            <span id="val-sdnn" class="model-val">-- ms</span>
+                        </div>
+                        <div class="model-row">
+                            <span class="model-name">RMSSD:</span>
+                            <span id="val-rmssd" class="model-val">-- ms</span>
+                        </div>
+                        <div class="model-row">
+                            <span class="model-name">BODY TEMP:</span>
+                            <span class="model-val white-txt">36.7 °C</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="fused-status-text" class="status-console-msg">
+                    WAITING FOR ACQUISITION LOCK...
+                </div>
+
+            </section>
+
+        </main>
+    </div>
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+venv/
+__pycache__/
+*.pyc
+.idea/
+.vscode/
+*.log
+dataset/eye_sequences/
+.gemini/
