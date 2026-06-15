@@ -111,6 +111,6 @@ If you prefer to configure the Web Service manually:
 2. Connect your repository.
 3. Configure the following settings:
    - **Environment**: `Python`
-   - **Build Command**: `pip install -r requirements.txt`
+   - **Build Command**: `pip uninstall -y tensorflow tensorflow-intel tensorflow-cpu keras && pip install -r requirements.txt`
    - **Start Command**: `gunicorn app:app`
 4. Click **Deploy Web Service**.
