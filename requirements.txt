@@ -1,6 +1,6 @@
 flask
 flask-cors
-numpy
-scipy
-tensorflow-cpu
+numpy==1.26.4
+scipy==1.11.4
+tensorflow-cpu==2.15.1
 gunicorn
